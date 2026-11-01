@@ -19,7 +19,7 @@ AREA = "#72b966"       # Model Year area
 LINE = "#59a14f"       # Model Year line
 BAR = "#8cd17d"        # Top Make bars
 HEADER = "#a0d1ff"     # Model table measure headers
-PIE_COLORS = ["#4e79a7", "#f28e2b", "#e15759", "#76b7b2", "#59a14f"]  # Tableau 10
+GREEN_PIE = ["#2a6b3c", "#6bb26b", "#a5d89a", "#cfe9c6"]  # dark -> light green like your donut
  
 BEV = "Battery Electric Vehicle (BEV)"
 PHEV = "Plug-in Hybrid Electric Vehicle (PHEV)"
@@ -41,16 +41,17 @@ st.markdown(
     f"""
 <style>
 .block-container {{padding-top: 1rem; padding-bottom: 0.5rem; max-width: 1600px;}}
-.dash-title {{font-weight: 700; font-size: 20px; text-align: center; padding: 4px 0 8px 0;}}
-.ctitle {{background: {TITLE_BG}; color: {RED}; font-weight: 700; font-size: 12px; padding: 4px 8px;}}
-.kpi {{background: #fff; border: 1px solid #eee; padding: 8px 12px; min-height: 100px;}}
-.kpi-label {{color: {RED}; font-weight: 700; font-size: 12px;}}
-.kpi-value {{font-weight: 700; font-size: 22px;}}
-.kpi-pct {{color: {BLUE}; font-weight: 700; font-size: 14px;}}
+div[data-testid="stVerticalBlock"] {{gap: 0.5rem;}}
+.dash-title {{background: #ccffe8; font-weight: 700; font-size: 27px; padding: 6px 10px; color: #333;}}
+.st-key-leftpanel {{background: #ccffe8; padding: 10px;}}
+.ctitle {{background: {TITLE_BG}; color: {RED}; font-weight: 700; font-size: 16px; padding: 6px 8px;}}
+.kpi {{background: #fff; border: 1px solid #eee; padding: 8px 12px; min-height: 120px; text-align: center;}}
+.kpi-label {{color: {RED}; font-weight: 700; font-size: 16px;}}
+.kpi-value {{font-weight: 700; font-size: 30px;}}
+.kpi-pct {{color: {BLUE}; font-weight: 700; font-size: 19px;}}
 .mtable-wrap {{max-height: 300px; overflow-y: auto; border: 1px solid #eee;}}
-.mtable {{border-collapse: collapse; width: 100%; font-size: 11px;}}
-.mtable th {{position: sticky; top: 0; background: #f2f2f2; padding: 3px 6px; text-align: left;}}
-.mtable th.m {{background: {HEADER};}}
+.mtable {{border-collapse: collapse; width: 100%; font-size: 12px;}}
+.mtable th {{position: sticky; top: 0; background: {HEADER}; padding: 3px 6px; text-align: left;}}
 .mtable td {{padding: 2px 6px; border-bottom: 1px solid #f0f0f0;}}
 .mtable td.num {{text-align: right;}}
 </style>
@@ -148,6 +149,20 @@ def count(d):
     return int(d["DOL Vehicle ID"].nunique())
  
  
+def inr(n):
+    """Indian digit grouping like Tableau (en_IN): 150413 -> 1,50,413"""
+    s_ = str(int(n))
+    if len(s_) <= 3:
+        return s_
+    head, tail, groups = s_[:-3], s_[-3:], []
+    while len(head) > 2:
+        groups.insert(0, head[-2:])
+        head = head[:-2]
+    if head:
+        groups.insert(0, head)
+    return ",".join(groups + [tail])
+ 
+ 
 def kfmt(v):
     return f"{v / 1000:,.1f}K"
  
@@ -178,21 +193,22 @@ left, right = st.columns([14, 86])
  
 # ---------- LEFT PANEL: logo + 4 filters ----------
 with left:
-    logo = next((p for p in LOGO_FILES if os.path.exists(p)), None)
-    if logo:
-        st.image(logo, use_container_width=True)
-    else:
-        st.markdown("### ⚡ EV")
+    with st.container(key="leftpanel"):
+        logo = next((p for p in LOGO_FILES if os.path.exists(p)), None)
+        if logo:
+            st.image(logo, use_container_width=True)
+        else:
+            st.markdown("### ⚡ EV")
  
-    f_cafv = st.multiselect("CAFV Eligibility", sorted(df["CAFV"].dropna().unique()), placeholder="(All)")
-    f_type = st.multiselect("EV Type", sorted(df["EV Type"].dropna().unique()), placeholder="(All)")
-    f_model = st.multiselect("Model", sorted(df["Model"].dropna().unique()), placeholder="(All)")
-    f_state = st.multiselect("State", sorted(df["State"].dropna().unique()), placeholder="(All)")
+        f_cafv = st.multiselect("CAFV Eligibility", sorted(df["CAFV"].dropna().unique()), placeholder="(All)")
+        f_type = st.multiselect("EV Type", sorted(df["EV Type"].dropna().unique()), placeholder="(All)")
+        f_model = st.multiselect("Model", sorted(df["Model"].dropna().unique()), placeholder="(All)")
+        f_state = st.multiselect("State", sorted(df["State"].dropna().unique()), placeholder="(All)")
  
-    if sel_makes or sel_states:
-        if st.button("Clear click selection"):
-            st.session_state["sel_n"] += 1
-            st.rerun()
+        if sel_makes or sel_states:
+            if st.button("Clear click selection"):
+                st.session_state["sel_n"] += 1
+                st.rerun()
  
 base = df
 if f_cafv:
@@ -222,13 +238,13 @@ with right:
     phev = count(full[full["EV Type"] == "PHEV"])
     k1, k2, k3, k4 = st.columns(4)
     with k1:
-        kpi("Avg Electric Range", f"{full['Electric Range'].mean():,.1f} Miles")
+        kpi("Avg Electric Range", f"{full['Electric Range'].mean():,.2f} Miles")
     with k2:
-        kpi("Total Vehicles", f"{total:,}")
+        kpi("Total Vehicles", inr(total))
     with k3:
-        kpi("Total BEV Vehicles", f"{bev:,}", bev / total)
+        kpi("Total BEV Vehicles", inr(bev), bev / total)
     with k4:
-        kpi("Total PHEV Vehicles", f"{phev:,}", phev / total)
+        kpi("Total PHEV Vehicles", inr(phev), phev / total)
  
     # ---------- ROW 2: Model Year  |  State map ----------
     r2a, r2b = st.columns(2)
@@ -249,9 +265,9 @@ with right:
         fig.add_hline(y=avg_v, line_dash="dash", line_color="rgba(117,161,199,0.6)", line_width=1,
                       annotation_text=f"Avg : {kfmt(avg_v)}", annotation_position="top left",
                       annotation_font_size=9)
-        fig.update_layout(height=340, showlegend=False, margin=dict(l=5, r=5, t=25, b=5),
+        fig.update_layout(height=340, showlegend=False, margin=dict(l=5, r=5, t=10, b=5),
                           xaxis=dict(type="category", tickangle=-90, tickfont=dict(size=8), showgrid=False),
-                          yaxis=dict(visible=False, showgrid=False, range=[0, by_year["V"].max() * 1.2]),
+                          yaxis=dict(visible=False, showgrid=False, range=[0, by_year["V"].max() * 1.12]),
                           plot_bgcolor="white")
         st.plotly_chart(fig, use_container_width=True, config=CFG)
  
@@ -260,14 +276,14 @@ with right:
         by_state = (map_data.groupby("State")["DOL Vehicle ID"].nunique().reset_index(name="V"))
         fig = go.Figure()
         fig.add_trace(go.Choropleth(locations=by_state["State"], z=by_state["V"], locationmode="USA-states",
-                                    colorscale=[[0, "#e9f5e1"], [1, "#2e7d32"]], showscale=False,
+                                    colorscale=[[0, "#c9e8bd"], [1, "#2a6b3c"]], showscale=False,
                                     marker_line_color="white",
                                     hovertemplate="%{location}: %{z:,}<extra></extra>"))
         fig.add_trace(go.Scattergeo(locations=by_state["State"], locationmode="USA-states",
-                                    text=[f"{v:,}" for v in by_state["V"]], mode="text",
+                                    text=[inr(v) for v in by_state["V"]], mode="text",
                                     textfont=dict(size=8), hoverinfo="skip"))
         fig.update_layout(height=340, margin=dict(l=0, r=0, t=0, b=0), showlegend=False,
-                          geo=dict(scope="usa", showlakes=False, bgcolor="white"), clickmode="event+select")
+                          geo=dict(scope="usa", showlakes=False, bgcolor="white", showland=True, landcolor="#ececec", showsubunits=True, subunitcolor="#ffffff", showframe=False), clickmode="event+select")
         st.plotly_chart(fig, use_container_width=True, config=CFG, key=STATE_KEY,
                         on_select="rerun", selection_mode="points")
  
@@ -275,14 +291,18 @@ with right:
     r3a, r3b, r3c = st.columns([27, 22, 36])
  
     with r3a:
-        top_n = st.slider("Top N", 1, 15, 10)
-        ctitle(f"Top {top_n} Total Vehicles By Make")
+        tt1, tt2 = st.columns([3, 1])
+        with tt2:
+            top_n = int(st.number_input("Top N", min_value=1, max_value=15, value=10, step=1,
+                                        label_visibility="collapsed"))
+        with tt1:
+            ctitle(f"Top {top_n} Total Vehicles By Make")
         by_make = make_data.groupby("Make")["DOL Vehicle ID"].nunique().nlargest(top_n).reset_index(name="V")
-        by_make = by_make.sort_values("Make")  # Tableau shows them alphabetically
+        by_make = by_make.sort_values(["V", "Make"], ascending=[False, True])  # highest first, like Tableau
         tot = by_make["V"].sum()
         fig = go.Figure(go.Bar(
             x=by_make["V"], y=by_make["Make"], orientation="h", marker_color=BAR,
-            text=[f"{v:,} ; {v / tot:.2%}" for v in by_make["V"]], textposition="outside",
+            text=[f"{inr(v)} ; {v / tot:.2%}" for v in by_make["V"]], textposition="outside",
             textfont=dict(size=8), cliponaxis=False, hoverinfo="skip"))
         fig.update_layout(height=300, margin=dict(l=5, r=5, t=5, b=5), showlegend=False,
                           xaxis=dict(visible=False, range=[0, by_make["V"].max() * 1.5]),
@@ -299,9 +319,9 @@ with right:
         cafv_raw = cafv_raw.sort_values(["o", "CAFV"])
         tot = cafv_raw["V"].sum()
         labels = cafv_raw["CAFV"].tolist()
-        text = [f"{l}<br>{v:,} ; {v / tot:.2%}" for l, v in zip(labels, cafv_raw["V"])]
-        fig = go.Figure(go.Pie(labels=labels, values=cafv_raw["V"], hole=0.5, sort=False,
-                               marker=dict(colors=PIE_COLORS[:len(labels)]),
+        text = [f"{l}<br>{inr(v)} ; {v / tot:.2%}" for l, v in zip(labels, cafv_raw["V"])]
+        fig = go.Figure(go.Pie(labels=labels, values=cafv_raw["V"], hole=0.72, sort=False,
+                               marker=dict(colors=GREEN_PIE[:len(labels)]),
                                text=text, textinfo="text", textposition="outside",
                                textfont=dict(size=9), hoverinfo="skip"))
         fig.update_layout(height=300, margin=dict(l=30, r=30, t=20, b=20), showlegend=False)
@@ -310,10 +330,10 @@ with right:
     with r3c:
         ctitle("Total Vehicles By Model")
         t = (full.groupby(["Model", "Make", "EV Type"])["DOL Vehicle ID"].nunique().reset_index(name="V")
-             .sort_values(["Model", "Make", "EV Type"]))
+             .sort_values(["V", "Model"], ascending=[False, True]))
         tot = t["V"].sum()
         lo, hi = t["V"].min(), t["V"].max()
-        c0, c1 = (233, 245, 224), (46, 125, 50)
+        c0, c1 = (214, 238, 203), (30, 100, 55)
         rows = []
         for _, r in t.iterrows():
             k = 0 if hi == lo else (r["V"] - lo) / (hi - lo)
@@ -322,8 +342,8 @@ with right:
             rows.append(
                 f"<tr><td>{html.escape(str(r['Model']))}</td><td>{html.escape(str(r['Make']))}</td>"
                 f"<td>{html.escape(str(r['EV Type']))}</td>"
-                f"<td class='num' style='background:rgb{rgb};color:{fg}'>{r['V']:,}</td>"
-                f"<td class='num'>{r['V'] / tot:.2%}</td></tr>")
+                f"<td class='num' style='background:rgb{rgb};color:{fg}'>{inr(r['V'])}</td>"
+                f"<td class='num' style='background:rgb{rgb};color:{fg}'>{r['V'] / tot:.2%}</td></tr>")
         st.markdown(
             "<div class='mtable-wrap'><table class='mtable'><thead><tr>"
             "<th>Model</th><th>Make</th><th>EV Type</th>"
