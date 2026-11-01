@@ -1,0 +1,6 @@
+@echo off
+echo Installing libraries...
+pip install -r requirements.txt
+echo Starting app...
+python -m streamlit run app.py
+pause
