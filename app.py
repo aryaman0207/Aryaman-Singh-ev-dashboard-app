@@ -1,16 +1,16 @@
 import html
 import os
-
+ 
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
-
+ 
 # =====================================================================
 #  EV DASHBOARD  -  rebuilt from the Tableau workbook "EV_DASHBOARD.twb"
 # =====================================================================
 st.set_page_config(page_title="Electric Vehicles Data Analysis", page_icon="⚡",
                    layout="wide", initial_sidebar_state="collapsed")
-
+ 
 # ---------- Colours taken from the Tableau file ----------
 RED = "#aa0000"        # chart titles + KPI labels
 TITLE_BG = "#f5eddc"   # chart title background
@@ -20,11 +20,11 @@ LINE = "#59a14f"       # Model Year line
 BAR = "#8cd17d"        # Top Make bars
 HEADER = "#a0d1ff"     # Model table measure headers
 PIE_COLORS = ["#4e79a7", "#f28e2b", "#e15759", "#76b7b2", "#59a14f"]  # Tableau 10
-
+ 
 BEV = "Battery Electric Vehicle (BEV)"
 PHEV = "Plug-in Hybrid Electric Vehicle (PHEV)"
 CAFV_COL = "Clean Alternative Fuel Vehicle (CAFV) Eligibility"
-
+ 
 # Aliases (renamed values) from the Tableau file
 CAFV_ALIAS = {
     "Clean Alternative Fuel Vehicle Eligible": "CAFV Eligible",
@@ -32,11 +32,11 @@ CAFV_ALIAS = {
     "Not eligible due to low battery range": "CAFV Not eligible",
 }
 TYPE_ALIAS = {BEV: "BEV", PHEV: "PHEV"}
-
+ 
 SMALL_FILE = "ev_data_small.csv"
 FULL_FILE = "Electric_Vehicle_Population_Data.csv"
 LOGO_FILES = ["EV DASHBOARD.png", "logo.png"]
-
+ 
 st.markdown(
     f"""
 <style>
@@ -57,7 +57,7 @@ st.markdown(
 """,
     unsafe_allow_html=True,
 )
-
+ 
 # ---------- Load data ----------
 RULES = {
     "DOL Vehicle ID": ("dol vehicle id", "vehicle id"),
@@ -69,12 +69,12 @@ RULES = {
     CAFV_COL: ("clean alternative fuel vehicle (cafv) eligibility", "cafv"),
     "Electric Range": ("electric range", None),
 }
-
-
+ 
+ 
 def clean(name):
     return " ".join(str(name).replace("\ufeff", "").split()).lower()
-
-
+ 
+ 
 @st.cache_data
 def load_data() -> pd.DataFrame:
     if os.path.exists(SMALL_FILE):
@@ -92,23 +92,44 @@ def load_data() -> pd.DataFrame:
                 mapping[found] = canonical
         return pd.read_csv(FULL_FILE, usecols=list(mapping.keys())).rename(columns=mapping)
     return pd.DataFrame()
-
-
+ 
+ 
 df = load_data()
 if df.empty:
     st.error(f"CSV not found. Put '{FULL_FILE}' (or '{SMALL_FILE}') in the same folder as app.py")
     st.stop()
-
-df["CAFV"] = df[CAFV_COL].map(CAFV_ALIAS).fillna(df[CAFV_COL])
-df["EV Type"] = df["Electric Vehicle Type"].map(TYPE_ALIAS).fillna(df["Electric Vehicle Type"])
-
+ 
+def classify_type(v):
+    u = str(v).upper()
+    if "PHEV" in u or "PLUG" in u or "HYBRID" in u:
+        return "PHEV"
+    if "BEV" in u or "BATTERY" in u:
+        return "BEV"
+    return str(v).strip()
+ 
+ 
+def classify_cafv(v):
+    u = str(v).upper()
+    if "UNKNOWN" in u:
+        return "CAFV Unknown"
+    if "NOT ELIGIBLE" in u:
+        return "CAFV Not eligible"
+    if "ELIGIBLE" in u:
+        return "CAFV Eligible"
+    return str(v).strip()
+ 
+ 
+CAFV_ORDER = ["CAFV Eligible", "CAFV Unknown", "CAFV Not eligible"]
+df["CAFV"] = df[CAFV_COL].map(classify_cafv)
+df["EV Type"] = df["Electric Vehicle Type"].map(classify_type)
+ 
 # ---------- Click-to-filter (Tableau dashboard actions) ----------
 if "sel_n" not in st.session_state:
     st.session_state["sel_n"] = 0
 N = st.session_state["sel_n"]
 MAKE_KEY, STATE_KEY = f"make_chart_{N}", f"state_chart_{N}"
-
-
+ 
+ 
 def clicked(key, field):
     """Values the user clicked in a chart (read from the previous run)."""
     try:
@@ -116,29 +137,29 @@ def clicked(key, field):
         return [p[field] for p in pts if p.get(field) is not None]
     except Exception:
         return []
-
-
+ 
+ 
 sel_makes = clicked(MAKE_KEY, "y")
 sel_states = clicked(STATE_KEY, "location")
-
-
+ 
+ 
 # ---------- Small helpers ----------
 def count(d):
     return int(d["DOL Vehicle ID"].nunique())
-
-
+ 
+ 
 def kfmt(v):
     return f"{v / 1000:,.1f}K"
-
-
+ 
+ 
 def ctitle(text):
     st.markdown(f'<div class="ctitle">{html.escape(text)}</div>', unsafe_allow_html=True)
-
-
+ 
+ 
 def empty_msg():
     st.info("No data for the current selection.")
-
-
+ 
+ 
 def kpi(label, value, pct=None):
     extra = f'<div class="kpi-pct">% of Total : {pct:.1%}</div>' if pct is not None else ""
     st.markdown(
@@ -146,15 +167,15 @@ def kpi(label, value, pct=None):
         f'<div class="kpi-value">{value}</div>{extra}</div>',
         unsafe_allow_html=True,
     )
-
-
+ 
+ 
 CFG = {"displayModeBar": False}
-
+ 
 # ---------- Page title ----------
 st.markdown('<div class="dash-title">ELECTRIC VEHICLES DATA ANALYSIS</div>', unsafe_allow_html=True)
-
+ 
 left, right = st.columns([14, 86])
-
+ 
 # ---------- LEFT PANEL: logo + 4 filters ----------
 with left:
     logo = next((p for p in LOGO_FILES if os.path.exists(p)), None)
@@ -162,17 +183,17 @@ with left:
         st.image(logo, use_container_width=True)
     else:
         st.markdown("### ⚡ EV")
-
+ 
     f_cafv = st.multiselect("CAFV Eligibility", sorted(df["CAFV"].dropna().unique()), placeholder="(All)")
     f_type = st.multiselect("EV Type", sorted(df["EV Type"].dropna().unique()), placeholder="(All)")
     f_model = st.multiselect("Model", sorted(df["Model"].dropna().unique()), placeholder="(All)")
     f_state = st.multiselect("State", sorted(df["State"].dropna().unique()), placeholder="(All)")
-
+ 
     if sel_makes or sel_states:
         if st.button("Clear click selection"):
             st.session_state["sel_n"] += 1
             st.rerun()
-
+ 
 base = df
 if f_cafv:
     base = base[base["CAFV"].isin(f_cafv)]
@@ -182,23 +203,23 @@ if f_model:
     base = base[base["Model"].isin(f_model)]
 if f_state:
     base = base[base["State"].isin(f_state)]
-
+ 
 # Which sheets react to which click (same as the two Tableau actions)
 by_make_filter = base[base["Make"].isin(sel_makes)] if sel_makes else base
 by_state_filter = base[base["State"].isin(sel_states)] if sel_states else base
 full = by_state_filter[by_state_filter["Make"].isin(sel_makes)] if sel_makes else by_state_filter
 map_data = by_make_filter                # map: reacts to Make click only
 make_data = by_state_filter              # Top Make: reacts to State click only
-
+ 
 with right:
     if base.empty or full.empty:
         st.warning("No data for these filters.")
         st.stop()
-
+ 
     # ---------- ROW 1: KPI tiles ----------
     total = count(full)
-    bev = count(full[full["Electric Vehicle Type"] == BEV])
-    phev = count(full[full["Electric Vehicle Type"] == PHEV])
+    bev = count(full[full["EV Type"] == "BEV"])
+    phev = count(full[full["EV Type"] == "PHEV"])
     k1, k2, k3, k4 = st.columns(4)
     with k1:
         kpi("Avg Electric Range", f"{full['Electric Range'].mean():,.1f} Miles")
@@ -208,10 +229,10 @@ with right:
         kpi("Total BEV Vehicles", f"{bev:,}", bev / total)
     with k4:
         kpi("Total PHEV Vehicles", f"{phev:,}", phev / total)
-
+ 
     # ---------- ROW 2: Model Year  |  State map ----------
     r2a, r2b = st.columns(2)
-
+ 
     with r2a:
         ctitle("Total Vehicles By Model Year")
         by_year = (full.groupby("Model Year")["DOL Vehicle ID"].nunique().reset_index(name="V").sort_values("Model Year"))
@@ -233,7 +254,7 @@ with right:
                           yaxis=dict(visible=False, showgrid=False, range=[0, by_year["V"].max() * 1.2]),
                           plot_bgcolor="white")
         st.plotly_chart(fig, use_container_width=True, config=CFG)
-
+ 
     with r2b:
         ctitle("Total Vehicles By State")
         by_state = (map_data.groupby("State")["DOL Vehicle ID"].nunique().reset_index(name="V"))
@@ -249,10 +270,10 @@ with right:
                           geo=dict(scope="usa", showlakes=False, bgcolor="white"), clickmode="event+select")
         st.plotly_chart(fig, use_container_width=True, config=CFG, key=STATE_KEY,
                         on_select="rerun", selection_mode="points")
-
+ 
     # ---------- ROW 3: Top N Make | CAFV pie | Model table ----------
     r3a, r3b, r3c = st.columns([27, 22, 36])
-
+ 
     with r3a:
         top_n = st.slider("Top N", 1, 15, 10)
         ctitle(f"Top {top_n} Total Vehicles By Make")
@@ -270,12 +291,14 @@ with right:
         fig.update_traces(selected=dict(marker=dict(color=BAR)), unselected=dict(marker=dict(opacity=0.35)))
         st.plotly_chart(fig, use_container_width=True, config=CFG, key=MAKE_KEY,
                         on_select="rerun", selection_mode="points")
-
+ 
     with r3b:
         ctitle("Total Vehicles By CAFV Eligibility")
-        cafv_raw = full.groupby(CAFV_COL)["DOL Vehicle ID"].nunique().reset_index(name="V").sort_values(CAFV_COL)
+        cafv_raw = full.groupby("CAFV")["DOL Vehicle ID"].nunique().reset_index(name="V")
+        cafv_raw["o"] = cafv_raw["CAFV"].map(lambda n: CAFV_ORDER.index(n) if n in CAFV_ORDER else 99)
+        cafv_raw = cafv_raw.sort_values(["o", "CAFV"])
         tot = cafv_raw["V"].sum()
-        labels = [CAFV_ALIAS.get(n, n) for n in cafv_raw[CAFV_COL]]
+        labels = cafv_raw["CAFV"].tolist()
         text = [f"{l}<br>{v:,} ; {v / tot:.2%}" for l, v in zip(labels, cafv_raw["V"])]
         fig = go.Figure(go.Pie(labels=labels, values=cafv_raw["V"], hole=0.5, sort=False,
                                marker=dict(colors=PIE_COLORS[:len(labels)]),
@@ -283,7 +306,7 @@ with right:
                                textfont=dict(size=9), hoverinfo="skip"))
         fig.update_layout(height=300, margin=dict(l=30, r=30, t=20, b=20), showlegend=False)
         st.plotly_chart(fig, use_container_width=True, config=CFG)
-
+ 
     with r3c:
         ctitle("Total Vehicles By Model")
         t = (full.groupby(["Model", "Make", "EV Type"])["DOL Vehicle ID"].nunique().reset_index(name="V")
